@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ارائه: معماری Serverless و مقایسه با رویکردهای سنتی</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --bg-dark: #0b1220;
+    --bg-slide: #101a2e;
+    --panel: #16233b;
+    --accent: #38bdf8;
+    --accent2: #a78bfa;
+    --accent3: #34d399;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --text: #e6edf7;
+    --muted: #9fb0c9;
+    --border: rgba(255,255,255,.09);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  html,body {
+    height:100%;
+    background: radial-gradient(1200px 700px at 80% -10%, #16305a 0%, transparent 60%),
+                radial-gradient(900px 600px at -10% 110%, #1d2a52 0%, transparent 55%),
+                var(--bg-dark);
+    color: var(--text);
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    overflow: hidden;
+  }
+
+  #app { height:100%; display:flex; flex-direction:column; }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    display:flex; align-items:center; gap:14px;
+    padding:10px 18px;
+    background: rgba(10,16,30,.75);
+    border-bottom:1px solid var(--border);
+    backdrop-filter: blur(8px);
+    z-index:20;
+  }
+  .brand { font-weight:700; font-size:14px; color:var(--accent); letter-spacing:.3px; }
+  .brand span { color:var(--muted); font-weight:400; }
+  .progress-wrap { flex:1; height:6px; background:rgba(255,255,255,.08); border-radius:99px; overflow:hidden; }
+  .progress-bar { height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .35s ease; border-radius:99px; }
+  .counter { font-size:13px; color:var(--muted); font-variant-numeric: tabular-nums; min-width:64px; text-align:center; }
+
+  .btn {
+    background: rgba(255,255,255,.06);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:6px 12px; border-radius:8px;
+    font-family:inherit; font-size:13px; cursor:pointer;
+    transition:.18s;
+  }
+  .btn:hover { background:rgba(56,189,248,.18); border-color:var(--accent); }
+  .btn.active { background:rgba(56,189,248,.28); border-color:var(--accent); color:#fff; }
+
+  /* ---------- Stage ---------- */
+  .stage {
+    flex:1; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    padding:8px;
+    min-height:0;
+  }
+
+  .slide {
+    display:none;
+    width:100%; height:100%;
+    background: linear-gradient(160deg, #14213c 0%, #0e1730 60%, #101c38 100%);
+    border:1px solid var(--border);
+    border-radius:20px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+    padding:56px 70px;
+    overflow:auto;
+    position:relative;
+    animation: fade .4s ease;
+  }
+  .slide.active {
+    display:flex; flex-direction:column;
+    justify-content:center;
+    justify-content:safe center;
+  }
+  @keyframes fade { from{opacity:0; transform:translateY(14px) scale(.99);} to{opacity:1; transform:none;} }
+
+  .slide::before {
+    content:""; position:absolute; inset:0;
+    background:
+      radial-gradient(600px 300px at 100% 0%, rgba(56,189,248,.10), transparent 60%),
+      radial-gradient(500px 320px at 0% 100%, rgba(167,139,250,.10), transparent 60%);
+    pointer-events:none; border-radius:20px;
+  }
+  .slide > * { position:relative; z-index:1; }
+
+  .slide-num {
+    position:absolute; left:30px; top:24px;
+    font-size:16px; color:var(--muted);
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--border);
+    padding:5px 16px; border-radius:99px; z-index:2;
+  }
+
+  .kicker {
+    display:inline-block; font-size:20px; color:var(--accent);
+    background:rgba(56,189,248,.12); border:1px solid rgba(56,189,248,.35);
+    padding:7px 22px; border-radius:99px; margin-bottom:22px; font-weight:500;
+    align-self:flex-start;
+  }
+  .kicker.sec { color:var(--accent2); background:rgba(167,139,250,.13); border-color:rgba(167,139,250,.4); }
+  .kicker.good { color:var(--accent3); background:rgba(52,211,153,.12); border-color:rgba(52,211,153,.4); }
+  .kicker.warn { color:var(--warn); background:rgba(251,191,36,.12); border-color:rgba(251,191,36,.4); }
+
+  h1.slide-title {
+    font-size:62px; font-weight:900; line-height:1.35;
+    margin-bottom:30px;
+    background:linear-gradient(90deg,#fff, #bcd7ff 60%, var(--accent));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .subtitle { color:var(--muted); font-size:28px; margin-bottom:38px; line-height:1.8; }
+
+  ul.content { list-style:none; display:flex; flex-direction:column; gap:22px; }
+  ul.content li {
+    background: rgba(255,255,255,.045);
+    border:1px solid var(--border);
+    border-right:6px solid var(--accent);
+    padding:24px 30px; border-radius:16px;
+    font-size:31px; line-height:1.85;
+    display:flex; gap:20px; align-items:flex-start;
+  }
+  ul.content li.sub { border-right-color:var(--accent2); background:rgba(255,255,255,.03); font-size:28px; }
+  ul.content li.good { border-right-color:var(--accent3); }
+  ul.content li.bad { border-right-color:var(--danger); }
+  ul.content li.warnb { border-right-color:var(--warn); }
+  .ico { flex:0 0 auto; font-size:32px; line-height:1.6; }
+
+  b, strong { color:#fff; font-weight:700; }
+  .hl { color:var(--accent); font-weight:700; }
+  .hl2 { color:var(--accent2); font-weight:700; }
+  .hl3 { color:var(--accent3); font-weight:700; }
+  .hlw { color:var(--warn); font-weight:700; }
+  .hld { color:var(--danger); font-weight:700; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:26px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; }
+
+  .card {
+    background:rgba(255,255,255,.05); border:1px solid var(--border);
+    border-radius:20px; padding:34px 38px;
+  }
+  .card h4 { font-size:32px; color:var(--accent); margin-bottom:18px; }
+  .card p, .card li { font-size:28px; color:var(--muted); line-height:1.85; }
+  .card.a2 h4 { color:var(--accent2); }
+  .card.a3 h4 { color:var(--accent3); }
+  .card.aw h4 { color:var(--warn); }
+  .card.ad h4 { color:var(--danger); }
+
+  /* Title slide */
+  .title-slide { display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; }
+  .title-slide .logo {
+    width:130px; height:130px; border-radius:34px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex; align-items:center; justify-content:center;
+    font-size:62px; margin-bottom:44px;
+    box-shadow:0 14px 40px rgba(56,189,248,.35);
+  }
+  .title-slide h1 { font-size:72px; font-weight:900; line-height:1.4; margin-bottom:30px;
+    background:linear-gradient(90deg,#fff,var(--accent));
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .title-slide .sub { font-size:30px; color:var(--muted); line-height:2; max-width:1300px; margin-bottom:54px; }
+  .meta { display:flex; flex-wrap:wrap; gap:22px; justify-content:center; }
+  .meta .m {
+    background:rgba(255,255,255,.05); border:1px solid var(--border);
+    padding:22px 38px; border-radius:18px; font-size:26px;
+  }
+  .meta .m span { color:var(--muted); font-size:21px; display:block; margin-bottom:8px; }
+  .meta .m b { color:var(--accent); font-weight:600; }
+
+  /* TOC */
+  .toc { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  .toc .item {
+    display:flex; gap:24px; align-items:center;
+    background:rgba(255,255,255,.05); border:1px solid var(--border);
+    border-radius:20px; padding:30px 34px; transition:.2s;
+  }
+  .toc .item:hover { border-color:var(--accent); background:rgba(56,189,248,.08); }
+  .toc .n {
+    flex:0 0 auto; width:76px; height:76px; border-radius:20px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:36px; color:#0b1220;
+  }
+  .toc .t { font-weight:700; font-size:27px; }
+  .toc .r { font-size:22px; color:var(--muted); margin-top:8px; }
+
+  /* Table */
+  table.cmp {
+    width:100%; border-collapse:separate; border-spacing:0;
+    font-size:26px; margin-top:6px;
+    background:rgba(255,255,255,.04); border-radius:18px; overflow:hidden;
+    border:1px solid var(--border);
+  }
+  table.cmp th, table.cmp td { padding:22px 24px; text-align:right; border-bottom:1px solid var(--border); }
+  table.cmp th { background:linear-gradient(90deg, rgba(56,189,248,.25), rgba(167,139,250,.2)); font-weight:700; font-size:25px; }
+  table.cmp tr:last-child td { border-bottom:none; }
+  table.cmp td:first-child { color:var(--muted); font-weight:600; }
+  table.cmp tbody tr:hover { background:rgba(255,255,255,.04); }
+  .pill { padding:7px 20px; border-radius:99px; font-size:23px; font-weight:700; display:inline-block; }
+  .p-ok { background:rgba(52,211,153,.18); color:var(--accent3); }
+  .p-mid { background:rgba(251,191,36,.18); color:var(--warn); }
+  .p-bad { background:rgba(248,113,113,.18); color:var(--danger); }
+
+  /* Checklist */
+  .check { display:flex; flex-direction:column; gap:22px; }
+  .check .c {
+    display:flex; gap:24px; align-items:center;
+    background:rgba(255,255,255,.05); border:1px solid var(--border);
+    border-radius:18px; padding:28px 34px; font-size:27px;
+  }
+  .check .box {
+    flex:0 0 auto; width:46px; height:46px; border-radius:12px;
+    border:3px solid var(--accent); display:flex; align-items:center; justify-content:center;
+    color:var(--accent); font-weight:900; font-size:27px;
+  }
+  .check .verdict { margin-inline-start:auto; font-size:23px; font-weight:700; white-space:nowrap;
+    padding:9px 24px; border-radius:99px; }
+  .v-yes { background:rgba(52,211,153,.16); color:var(--accent3); }
+  .v-no { background:rgba(248,113,113,.16); color:var(--danger); }
+
+  /* Section divider */
+  .divider { display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; }
+  .divider .big {
+    font-size:200px; font-weight:900; line-height:1;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    opacity:.9; margin-bottom:26px;
+  }
+  .divider h1 { font-size:62px; font-weight:900; margin-bottom:30px; }
+  .divider p { color:var(--muted); font-size:28px; max-width:1250px; line-height:2; }
+
+  /* Formula */
+  .formula {
+    background:#0a1020; border:1px solid rgba(56,189,248,.35);
+    border-radius:20px; padding:42px; text-align:center;
+    font-size:40px; font-weight:700; color:var(--accent);
+    font-family: 'Courier New', monospace; direction:ltr;
+    box-shadow: inset 0 0 40px rgba(56,189,248,.06);
+  }
+  .formula .op { color:var(--accent2); }
+
+  /* Stats */
+  .stat {
+    background:linear-gradient(160deg, rgba(56,189,248,.14), rgba(255,255,255,.03));
+    border:1px solid rgba(56,189,248,.3); border-radius:24px;
+    padding:44px 32px; text-align:center;
+  }
+  .stat .num { font-size:66px; font-weight:900; color:var(--accent); line-height:1.3; }
+  .stat .lbl { font-size:25px; color:var(--muted); margin-top:16px; line-height:1.8; }
+  .stat.g { background:linear-gradient(160deg, rgba(52,211,153,.14), rgba(255,255,255,.03)); border-color:rgba(52,211,153,.3); }
+  .stat.g .num { color:var(--accent3); }
+  .stat.v { background:linear-gradient(160deg, rgba(167,139,250,.14), rgba(255,255,255,.03)); border-color:rgba(167,139,250,.3); }
+  .stat.v .num { color:var(--accent2); }
+  .stat.r { background:linear-gradient(160deg, rgba(248,113,113,.14), rgba(255,255,255,.03)); border-color:rgba(248,113,113,.3); }
+  .stat.r .num { color:var(--danger); }
+
+  .flow { display:flex; align-items:stretch; gap:18px; flex-wrap:wrap; }
+  .flow .step {
+    flex:1; min-width:260px;
+    background:rgba(255,255,255,.05); border:1px solid var(--border);
+    border-radius:18px; padding:32px; text-align:center;
+  }
+  .flow .step .n { font-size:21px; color:var(--accent); font-weight:700; margin-bottom:14px; }
+  .flow .step .d { font-size:25px; line-height:1.85; color:var(--muted); }
+  .flow .arr { display:flex; align-items:center; font-size:40px; color:var(--accent); }
+
+  .note {
+    margin-top:26px; font-size:23px; color:var(--muted);
+    background:rgba(255,255,255,.04); border:2px dashed var(--border);
+    border-radius:16px; padding:24px 30px; line-height:1.9;
+    align-self:stretch;
+    text-align:center;
+  }
+  .title-slide .note {
+    align-self:auto;
+    max-width:900px;
+    margin-inline:auto;
+  }
+
+  /* ---------- Bottom bar ---------- */
+  .bottombar {
+    display:flex; align-items:center; gap:14px;
+    padding:10px 18px;
+    background: rgba(10,16,30,.75);
+    border-top:1px solid var(--border);
+    backdrop-filter: blur(8px);
+    z-index:20;
+  }
+  .nav { display:flex; gap:8px; }
+  .nav .btn { min-width:96px; text-align:center; font-weight:600; }
+  .nav .btn:disabled { opacity:.35; cursor:not-allowed; }
+  .hint { flex:1; text-align:center; font-size:12.5px; color:var(--muted); }
+  kbd {
+    background:rgba(255,255,255,.1); border:1px solid var(--border);
+    border-bottom-width:2px; border-radius:5px; padding:1px 7px;
+    font-size:11.5px; font-family:inherit; color:#fff;
+  }
+
+  /* Speaker notes */
+  .notes {
+    display:none;
+    position:fixed; left:0; right:0; bottom:56px;
+    max-height:38vh; overflow:auto;
+    background:rgba(8,13,26,.97); border-top:2px solid var(--accent2);
+    padding:20px 30px; z-index:40;
+    box-shadow:0 -20px 50px rgba(0,0,0,.6);
+  }
+  .notes.show { display:block; animation:slideup .3s ease; }
+  @keyframes slideup { from{transform:translateY(30px); opacity:0;} to{transform:none;opacity:1;} }
+  .notes h3 { color:var(--accent2); font-size:15px; margin-bottom:10px; }
+  .notes p { font-size:15.5px; line-height:2.1; color:#d6e2f5; }
+
+  /* overview */
+  .overview {
+    display:none; position:fixed; inset:0; z-index:60;
+    background:rgba(6,10,20,.97); overflow:auto; padding:30px;
+  }
+  .overview.show { display:block; }
+  .overview h2 { text-align:center; margin-bottom:22px; color:var(--accent); }
+  .ov-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; max-width:1300px; margin:0 auto; }
+  .ov-item {
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:14px; cursor:pointer; transition:.18s;
+  }
+  .ov-item:hover { border-color:var(--accent); transform:translateY(-3px); }
+  .ov-item .ovn { font-size:11px; color:var(--accent); font-weight:700; margin-bottom:6px; }
+  .ov-item .ovt { font-size:13px; line-height:1.7; color:var(--text); }
+  .ov-close { position:sticky; top:0; float:left; }
+
+  @media (max-width:900px){
+    .slide { padding:28px 24px; }
+    h1.slide-title { font-size:24px; }
+    ul.content li { font-size:14px; }
+    .grid2,.grid3,.toc { grid-template-columns:1fr; }
+    .title-slide h1 { font-size:26px; }
+    .hint { display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand">Serverless <span>— معماری و مقایسه با رویکردهای سنتی</span></div>
+    <div class="progress-wrap"><div class="progress-bar" id="pbar"></div></div>
+    <div class="counter" id="counter">1 / 50</div>
+    <button class="btn" id="btnNotes" title="یادداشت ارائه‌دهنده (P)">یادداشت</button>
+    <button class="btn" id="btnOverview" title="نمای کلی (O)">فهرست</button>
+    <button class="btn" id="btnFull" title="تمام‌صفحه (F)">⛶</button>
+  </div>
+
+  <div class="stage" id="stage"><!-- slides injected --></div>
+
+  <div class="notes" id="notes">
+    <h3>📄 توضیحات ارائه‌دهنده (حدود ۲ دقیقه)</h3>
+    <p id="notesText"></p>
+  </div>
+
+  <div class="bottombar">
+    <div class="nav">
+      <button class="btn" id="prev">▶ قبلی</button>
+      <button class="btn" id="next">بعدی ◀</button>
+    </div>
+    <div class="hint">
+      با <kbd>→</kbd> <kbd>←</kbd> جابه‌جا شوید · <kbd>P</kbd> یادداشت · <kbd>O</kbd> فهرست · <kbd>F</kbd> تمام‌صفحه
+    </div>
+    <div class="nav">
+      <button class="btn" id="first">⏮ اول</button>
+      <button class="btn" id="last">آخر ⏭</button>
+    </div>
+  </div>
+</div>
+
+<div class="overview" id="overview">
+  <button class="btn ov-close" id="ovClose">✕ بستن</button>
+  <h2>فهرست کل اسلایدها</h2>
+  <div class="ov-grid" id="ovGrid"></div>
+</div>
+
+<script>
+const slides = [
+/* 1 */ {type:"title", title:"معماری Serverless و مقایسه جامع آن با رویکردهای سنتی",
+  sub:"بررسی تکامل پردازش ابری، الگوی FaaS، تحلیل هزینه‌ها و چالش‌های پیاده‌سازی",
+  meta:[["ارائه‌دهنده","میلاد طحانیان فینی"],["استاد راهنما","استاد محمدرضا باباولیان"],["دانشگاه","دانشگاه ملی مهارت شهید رجایی کاشان"],["زمان تخمینی","۱۰۰ دقیقه"]],
+  notes:"با سلام و احترام خدمت استاد گرامی جناب آقای باباولیان و حضار محترم. امروز در این ارائه تخصصی به بررسی یکی از مهم‌ترین و مدرن‌ترین رویکردهای معماری نرم‌افزار در عصر پردازش ابری، یعنی معماری Serverless یا بدون سرور می‌پردازیم. هدف این ارائه، تحلیل سیر تکاملی سیستم‌های رایانشی از معماری‌های یکپارچه سنتی تا معماری‌های رویدادمحور بدون سرور، بررسی دقیق مزایا، چالش‌ها، الگوهای طراحی و تحلیل هزینه‌های اقتصادی آن است."},
+
+/* 2 */ {type:"toc", title:"سرفصل‌ها و نقشه راه ارائه",
+  items:[
+    ["بخش اول","سیر تکاملی معماری نرم‌افزار","اسلایدهای ۳ تا ۸"],
+    ["بخش دوم","مفاهیم و مؤلفه‌های اصلی Serverless","اسلایدهای ۹ تا ۱۶"],
+    ["بخش سوم","مقایسه عمیق با روش‌های سنتی","اسلایدهای ۱۷ تا ۲۶"],
+    ["بخش چهارم","اکوسیستم و سرویس‌های ابری","اسلایدهای ۲۷ تا ۳۴"],
+    ["بخش پنجم","سناریوهای کاربردی و الگوهای طراحی","اسلایدهای ۳۵ تا ۴۲"],
+    ["بخش ششم","چالش‌ها، امنیت و آینده Serverless","اسلایدهای ۴۳ تا ۵۰"]
+  ],
+  notes:"ارائه امروز ما در ۶ بخش اصلی تقسیم‌بندی شده است. ابتدا نگاهی تاریخی به تکامل زیرساخت‌ها خواهیم داشت تا بفهمیم چه نیازهایی باعث خلق Serverless شد. سپس مؤلفه‌های پایه‌ای مانند FaaS و BaaS را تعریف می‌کنیم. در بخش سوم مقایسه‌ای همه‌جانبه میان روش‌های سنتی، کانتینرها و Serverless انجام می‌دهیم. بخش چهارم به معرفی ابزارها و ارائه‌دهندگان ابری اختصاص دارد. در بخش پنجم سناریوهای واقعی و الگوهای طراحی را بررسی می‌کنیم و در نهایت چالش‌های امنیتی، محدودیت‌ها و آینده این فناوری را نقد خواهیم کرد."},
+
+/* 3 */ {title:"معماری یکپارچه (Monolith) و چالش‌های آن", kicker:"بخش اول · سیر تکامل",
+  list:[
+    ["📐","<b>تعریف:</b> ترکیب تمامی لایه‌های برنامه (رابط کاربری، منطق تجاری، دسترسی به داده) در یک <span class='hl'>Base Code واحد</span>."],
+    ["✅","<b>مزایا اولیه:</b> سادگی اولیه در توسعه و تست پروژه در مقیاس کوچک."],
+    ["⚠️","<b>وابستگی شدید کدها</b> (Tight Coupling)", "sub"],
+    ["⚠️","<b>عدم امکان مقیاس‌پذیری مستقل</b> بخش‌های پرمصرف.", "sub"],
+    ["🛑","<b>خطر Single Point of Failure:</b> سقوط کامل برنامه با یک خطای کوچک.", "sub"]
+  ],
+  notes:"در روزهای ابتدایی توسعه نرم‌افزار، معماری Monolithic استاندارد اصلی بود. در این الگوی سنتی، تمام اجزای نرم‌افزار سرهم‌بندی شده و به صورت یک فایل خروجی واحد روی سرور فیزیکی یا مجازی قرار می‌گرفتند. اگرچه این روش برای برنامه‌های کوچک بسیار سریع پیاده‌سازی می‌شود، اما با رشد پروژه، نگهداشت آن کابوس خواهد شد. تغییر در یک بخش نیازمند تست و استقرار مجدد کل برنامه است و امکان مقیاس‌پذیری بخش‌های خاص وجود ندارد."},
+
+/* 4 */ {title:"انقلاب مجازی‌سازی (Hardware Virtualization)", kicker:"بخش اول · سیر تکامل",
+  list:[
+    ["🖥️","<b>مفهوم:</b> استفاده از <span class='hl'>Hypervisor</span> برای تقسیم یک سرور فیزیکی (Bare-Metal) به چند ماشین مجازی مجزا."],
+    ["📈","<b>افزایش نرخ بهره‌وری</b> از منابع سخت‌افزاری CPU و RAM.", "sub"],
+    ["🔒","<b>ایزوله‌سازی بهتر</b> برنامه‌ها روی یک سرور مشترک.", "sub"],
+    ["🐘","<b>بار سنگین</b> به دلیل اجرای یک سیستم‌عامل کامل (Guest OS) روی هر VM.", "bad"],
+    ["🐢","<b>زمان راه‌اندازی طولانی:</b> چند دقیقه برای بوت شدن OS.", "bad"]
+  ],
+  notes:"با معرفی فناوری مجازی‌سازی توسط شرکت‌هایی مثل VMware، عصر سرورهای Bare-metal جای خود را به ماشین‌های مجازی داد. در این فناوری، یک سخت‌افزار فیزیکی قوی به چندین VM تقسیم می‌شد. با اینکه این کار هزینه‌های سخت‌افزار را کاهش داد و ایزوله‌سازی را بهتر کرد، اما کماکان مشکل سنگین بودن سیستم‌عامل Guest وجود داشت. هر VM نیازمند گیگابایت‌ها حافظه برای خود سیستم‌عامل بود و زمان بوت بالا، مانع مقیاس‌پذیری آنی می‌شد."},
+
+/* 5 */ {title:"کانتینری‌سازی و ارکستراسیون زیرساخت", kicker:"بخش اول · سیر تکامل",
+  list:[
+    ["🐳","<b>دستاورد اصلی:</b> اشتراک‌گذاری هسته سیستم‌عامل (Host OS Kernel) و حذف Guest OS."],
+    ["⚡","<b>سبک‌سازی فوق‌العاده</b> و راه‌اندازی در چند ثانیه.", "sub good"],
+    ["🔁","<b>حل مشکل تفاوت محیط توسعه و پروداکشن</b> («روی سیستم من کار می‌کرد!»).", "sub good"],
+    ["☸️","<b>نیاز به ارکستراتورهایی مثل Kubernetes</b>.", "bad"],
+    ["🧩","<b>پیچیدگی مدیریت کلستر، نودها، شبکه و Auto-scaling</b>.", "bad"]
+  ],
+  notes:"ظهور داکر دنیا را تغییر داد. کانتینرها با حذف سیستم‌عامل اضافه و استفاده از Kernel مشترک، فوق‌العاده سبک شدند. برنامه‌ها در ابعاد مگابایت بسته‌بندی شده و در چند ثانیه اجرا می‌شدند. با این حال، مدیریت صدها کانتینر نیاز به ابزارهایی مانند کوبرنتیز داشت. کوبرنتیز اگرچه بسیار قدرتمند است، اما منحنی یادگیری بسیار تندی دارد و تیم‌ها بخش زیادی از توان خود را صرف پایش کلستر، مدیریت نودها و به‌روزرسانی زیرساخت می‌کنند."},
+
+/* 6 */ {title:"معماری Serverless چیست؟", kicker:"تعریف کلیدی", kclass:"good",
+  list:[
+    ["🎯","<b>تعریف کلیدی:</b> رویکردی در معماری ابری که در آن مسئولیت مدیریت، نگهداری و مقیاس‌دهی سرورها کاملاً بر عهده <span class='hl'>Cloud Provider</span> است."],
+    ["1️⃣","<b>No Server Management:</b> عدم نیاز به پیکربندی یا به‌روزرسانی سرور.", "sub"],
+    ["2️⃣","<b>Flexible Scaling:</b> مقیاس‌پذیری خودکار و لحظه‌ای از صفر تا بی‌نهایت.", "sub"],
+    ["3️⃣","<b>Pay-per-Use:</b> پرداخت دقیقاً بر اساس زمان اجرای کد به <span class='hl'>میلی‌ثانیه</span>.", "sub"]
+  ],
+  notes:"به تعریف اصلی بحث امروز رسیدیم. معماری بدون سرور یا Serverless، یک مدل اجرای رایانش ابری است که در آن ارائه‌دهنده ابری به صورت دینامیک تخصیص منابع سرور را مدیریت می‌کند. در این مدل، شما کدی را تحویل می‌دهید و ابر آن را اجرا می‌کند. هیچ نیازی به اجاره سرور، تنظیم لودبالانسر، وصله امنیتی زدن به سیستم‌عامل یا مدیریت حافظه وجود ندارد. مهم‌تر از همه، اگر کدی اجرا نشود، هزینه‌ای پرداخت نخواهد شد."},
+
+/* 7 */ {title:"شفاف‌سازی و باورهای غلط (Myths vs Reality)", kicker:"باورهای نادرست", kclass:"warn",
+  grid2:[
+    {cls:"ad", h:"❌ باور غلط ۱", p:"سرورها کاملاً نابود شده‌اند!<br><br><b style='color:#34d399'>✔ واقعیت:</b> سرورها وجود دارند، اما <b>انتزاعی (Abstract)</b> شده‌اند و شما آنها را نمی‌بینید."},
+    {cls:"ad", h:"❌ باور غلط ۲", p:"Serverless فقط برای پروژه‌های کوچک و اسکریپت‌های ساده است.<br><br><b style='color:#34d399'>✔ واقعیت:</b> شرکت‌های غول‌پیکری مانند <b>Netflix، Coca-Cola و FINRA</b> شاکله اصلی سیستم‌های پردازشی خود را روی Serverless بنا کرده‌اند."}
+  ],
+  notes:"نام Serverless ممکن است گمراه‌کننده باشد. اولین باور اشتباه این است که برخی تصور می‌کنند سروری در کار نیست. سرورها وجود دارند، اما مدیریت آن‌ها از دوش توسعه‌دهنده برداشته شده و به ارائه‌دهنده ابری واگذار شده است. باور غلط دوم این است که این معماری صرفاً برای اسکریپت‌های دانشجویی یا کارهای کوچک است. امروزه بزرگ‌ترین سامانه‌های بانکی و استریم ویدیو با میلیون‌ها ترافیک در روز در حال مهاجرت به معماری بدون سرور هستند."},
+
+/* 8 */ {title:"ارزش‌های تجاری و فنی Serverless", kicker:"چرا Serverless اهمیت دارد؟", kclass:"good",
+  stats:[
+    {n:"۱۰×", l:"سرعت بیشتر در <b>Time-to-Market</b><br>تحویل سریع ویژگی‌های جدید به مشتری", c:""},
+    {n:"$0", l:"هزینه زمان <b>بی‌کاری (Idle)</b><br>عدم پرداخت هزینه برای سرورهای بدون ترافیک", c:"g"},
+    {n:"100%", l:"تمرکز بر <b>منطق تجاری</b><br>رهاسازی تیم از پیچیدگی‌های DevOps", c:"v"}
+  ],
+  notes:"چرا مدیران ارشد فناوری (CTOها) به سمت Serverless حرکت می‌کنند؟ جواب در دو کلمه خلاصه می‌شود: «سرعت» و «کاهش هزینه». در دنیای رقابتی امروز، شرکتی برنده است که ایده‌اش را سریع‌تر به محصول تبدیل کند. وقتی تیم شما درگیر تنظیمات شبکه و سرور نباشد، تمام تمرکز روی ارزش واقعی، یعنی نوشتن منطق تجاری برنامه قرار می‌گیرد. از طرفی، حذف هزینه سرورهای بلاتکلیف در ساعات کم‌ترافیک شب، سودآوری مالی شدیدی ایجاد می‌کند."},
+
+/* 9 */ {title:"بخش دوم: FaaS هسته پردازشی Serverless", kicker:"مفهوم FaaS", kclass:"sec",
+  list:[
+    ["⚙️","<b>مفهوم FaaS:</b> امکان اجرای تکه‌کدهای مستقل (<span class='hl'>Functions</span>) در ابر بدون مدیریت محیط اجرا."],
+    ["🧼","<b>Stateless:</b> بدون ذخیره وضعیت در حافظه محلی.", "sub"],
+    ["⏱️","<b>Transient:</b> زمان حیات بسیار کوتاه و موقت.", "sub"],
+    ["🎯","<b>Event-driven:</b> اجرا شدن صرفاً در پاسخ به یک رویداد مشخص.", "sub"]
+  ],
+  notes:"هسته محاسباتی معماری Serverless، مفهومی به نام FaaS یا تابع به عنوان سرویس است. در این مدل، شما به جای ساخت یک برنامه کلان، کدهای خود را به توابع کوچک، تک‌منظوره و مستقل تقسیم می‌کنید. این توابع Stateless هستند؛ یعنی هیچ حالتی را در حافظه خود نگه نمی‌دارند. هر بار که رویدادی رخ دهد، این تابع بیدار شده، کار خود را انجام داده و بلافاصله نابود می‌شود. AWS Lambda معروف‌ترین نمونه FaaS در دنیاست."},
+
+/* 10 */ {title:"مکمل Serverless: خدمات BaaS", kicker:"مفهوم BaaS", kclass:"sec",
+  grid3:[
+    {h:"🔐 Authentication", p:"احراز هویت با <b>AWS Cognito</b> یا <b>Firebase Auth</b>"},
+    {h:"🗄️ Managed Databases", p:"پایگاه داده بدون سرور مانند <b>DynamoDB</b> یا <b>Firestore</b>"},
+    {h:"📦 Storage", p:"ذخیره‌سازی فایل با <b>AWS S3</b>"}
+  ],
+  note:"<b>تعریف:</b> استفاده از سرویس‌های آماده ابری برای بخش‌های جانبی Backend. با ترکیب <span class='hl'>FaaS + BaaS</span>، برنامه‌نویس تقریباً هیچ نیازی به نوشتن کدهای زیرساختی نخواهد داشت.",
+  notes:"معماری Serverless فقط شامل توابع پردازشی (FaaS) نیست، بلکه لایه دیگری به نام BaaS یا بک‌اند به عنوان سرویس دارد. توسعه‌دهنده مدرن برای احراز هویت کاربران، ارسال ایمیل، ذخیره فایل یا پایگاه داده، کدی نمی‌نویسد؛ بلکه از سرویس‌های کاملاً مدیریت‌شده ابری استفاده می‌کند. با ترکیب FaaS و BaaS، سیستم برنامه‌نویس تقریباً هیچ نیازی به نوشتن کدهای زیرساختی برای احراز هویت یا مدیریت فایل نخواهد داشت."},
+
+/* 11 */ {title:"الگوی EDA در سیستم‌های Serverless", kicker:"معماری رویدادمحور", kclass:"sec",
+  flow:[
+    ["مرحله ۱","<b>Event Source</b><br>تولیدکننده: تغییر دیتابیس، آپلود فایل، درخواست HTTP"],
+    ["مرحله ۲","<b>Compute</b><br>پردازشگر: فراخوانی خودکار تابع FaaS مربوطه"],
+    ["مرحله ۳","<b>Destination</b><br>مصرف‌کننده: ذخیره‌سازی نتیجه یا اطلاع‌رسانی"]
+  ],
+  notes:"قلب تپنده سیستم‌های Serverless، معماری رویدادمحور یا EDA است. در معماری‌های سنتی، سرویس‌ها مدام به صورت Synchronous با هم حرف می‌زنند یا سرور مدام دیتابیس را Polling می‌کند. اما در Serverless، همه چیز منتظر یک Event است. برای مثال، زمانی که یک کاربر عکس پروفایلش را آپلود می‌کند، این اتفاق یک Event در سرویس S3 ایجاد می‌کند که به صورت اتوماتیک تابع پردازش تصویر را فعال می‌سازد."},
+
+/* 12 */ {title:"چرخه حیات یک تابع در Serverless", kicker:"Execution Lifecycle", kclass:"sec",
+  flow:[
+    ["Init Phase","دانلود کد، ساخت کانتینر ایزوله و اجرای کدهای خارج از Handler"],
+    ["Invoke Phase","اجرای کد اصلی تابع و پردازش رویداد دریافتی"],
+    ["Shutdown Phase","آزادکردن منابع و نابودی کانتینر در صورت عدم استفاده"]
+  ],
+  note:"⏱️ زمان Init مبنای پدیده <span class='hld'>Cold Start</span> و اجرای مجدد روی کانتینر آماده مبنای <span class='hl3'>Hot Start</span> است.",
+  notes:"وقتی درخواستی به یک تابع Serverless می‌رسد، پلتفرم ابری چرخه حیاتی را آغاز می‌کند. ابتدا محیط ایزوله یا کانتینر ساخته شده، کد دانلود می‌شود و تنظیمات اولیه انجام می‌گیرد که به آن مرحله Init می‌گویند. سپس در مرحله Invoke، رویداد ورودی پردازش شده و پاسخ بازگردانده می‌شود. پس از اتمام کار، محیط برای مدتی آماده می‌ماند و اگر درخواستی نیاید، در مرحله Shutdown کاملاً از بین می‌رود تا منابع آزاد شوند."},
+
+/* 13 */ {title:"پدیده Cold Start و Hot Start", kicker:"چالش کلیدی", kclass:"warn",
+  grid2:[
+    {cls:"ad", h:"🧊 Cold Start (استارت سرد)", p:"تاخیر اولیه‌ای که هنگام ایجاد یک <b>کانتینر جدید</b> رخ می‌دهد (شامل مرحله Init)."},
+    {cls:"a3", h:"🔥 Hot Start (استارت گرم)", p:"زمانی که تابع مجدداً فراخوانی شده و کانتینر <b>از قبل آماده</b> است (بدون تاخیر Init)."}
+  ],
+  note:"<b>عوامل مؤثر بر Cold Start:</b> زبان برنامه‌نویسی (<span class='hld'>Java/C#</span> کُندتر از <span class='hl3'>Node.js/Python</span>)، حجم کد و حافظه تخصیص یافته.",
+  notes:"یکی از مباحث بسیار مهم در بررسی Serverless، چالش Cold Start است. اگر تابعی برای مدت طولانی فراخوانی نشده باشد یا ترافیک ناگهان افزایش یابد، ارائه‌دهنده ابری باید کانتینر جدیدی بسازد. این فرایند بین ۲۰۰ میلی‌ثانیه تا چند ثانیه زمان می‌برد که به آن Cold Start می‌گویند. اما در فراخوانی‌های بعدی، کانتینر آماده است و تابع در چند میلی‌ثانیه اجرا می‌شود که به آن Hot Start می‌گویند. مدیریت Cold Start یکی از مهارت‌های مهم معماران Serverless است."},
+
+/* 14 */ {title:"اصل اساسی: برنامه‌نویسی بدون حالت (Stateless)", kicker:"مدیریت وضعیت", kclass:"sec",
+  list:[
+    ["🗑️","<b>اصل عدم بقای داده:</b> کانتینرهای اجرای توابع در هر لحظه ممکن است خلق شده یا نابود شوند."],
+    ["❌","<b>نتیجه:</b> هیچ داده‌ای نباید در Global Variableها یا حافظه رم محلی تابع برای درخواست بعدی ذخیره شود.", "bad"],
+    ["✅","<b>راهکار ذخیره‌سازی:</b> استفاده از <span class='hl'>ElastiCache (Redis)</span> یا پایگاه‌های داده NoSQL برای اشتراک‌گذاری وضعیت.", "good"]
+  ],
+  notes:"در طراحی سیستم‌های Serverless باید ذهنیت خود را تغییر دهیم. توابع FaaS کاملاً Stateless هستند. این بدین معناست که شما نمی‌توانید یک متغیر را در حافظه رم تابع مقداردهی کنید و انتظار داشته باشید کاربر در درخواست بعدی آن را ببیند؛ چون ممکن است درخواست بعدی روی کانتینر دیگری اجرا شود. برای مدیریت Sessionها و وضعیت برنامه، حتماً باید داده‌ها را در یک حافظه متمرکز بیرونی مانند Redis یا دیتابیس‌های سریع ذخیره کرد."},
+
+/* 15 */ {title:"نسل جدید پایگاه‌های داده Serverless", kicker:"پایگاه‌های داده اختصاصی", kclass:"sec",
+  grid3:[
+    {h:"⚡ Amazon DynamoDB", p:"دیتابیس NoSQL کلید-مقدار، مقیاس‌پذیری خودکار و تاخیر <b>تک‌رقمی میلی‌ثانیه</b>."},
+    {h:"🐬 Aurora Serverless", p:"دیتابیس رابطه‌ای (SQL) با قابلیت <b>Auto-scaling</b> منابع محاسباتی."},
+    {h:"🍃 MongoDB Atlas", p:"نسخه بدون سرور دیتابیس اسنادی محبوب MongoDB."}
+  ],
+  note:"❗ مشکل اصلی دیتابیس‌های سنتی در کنار Serverless: <span class='hld'>Connection Limit</span> — با مقیاس‌گیری هزاران تابع، اتصالات سنتی سرریز می‌شود.",
+  notes:"استفاده از دیتابیس‌های سنتی (مانند یک سرور MySQL عادی) در کنار توابع Serverless به مشکل Connection Limit می‌خورد؛ چرا که با مقیاس‌گیری هزاران تابع، اتصالات دیتابیس سنتی سرریز می‌کند. به همین دلیل دیتابیس‌های اختصاصی Serverless خلق شدند. این دیتابیس‌ها اتصالات را مدیریت کرده، به طور خودکار ظرفیت ذخیره‌سازی و پردازش را مقیاس می‌دهند و مدل پرداختی آن‌ها نیز بر اساس میزان خواندن و نوشتن (Read/Write Capacity) است."},
+
+/* 16 */ {title:"شریان‌های ارتباطی: SQS، SNS و EventBridge", kicker:"پیام‌رسانی و Event Bus", kclass:"sec",
+  grid3:[
+    {h:"📨 Amazon SQS (Queue)", p:"صف پیام برای جداسازی و غیرهمگام‌سازی (<b>Decoupling</b>) سرویس‌ها."},
+    {h:"📢 Amazon SNS (Pub/Sub)", p:"سیستم پخش پیام به چند مشترک به صورت <b>همزمان</b>."},
+    {h:"🌉 Amazon EventBridge", p:"مسیریابی هوشمند رویدادها بر اساس <b>قواعد مشخص</b> بین میکروخدمات."}
+  ],
+  note:"این سه سرویس کمک می‌کنند توابع بدون <span class='hl'>وابستگی مستقیم (Loose Coupling)</span> با یکدیگر کار کنند.",
+  notes:"برای اینکه توابع Serverless بتوانند بدون وابستگی مستقیم (Loose Coupling) با یکدیگر کار کنند، نیاز به شریان‌های ارتباطی پیام‌رسانی دارند. سرویس SQS نقش یک صف را ایفا می‌کند تا اگر حجم داده زیاد شد، پیام‌ها از دست نروند. سرویس SNS ابزار Pub/Sub است که یک رویداد را به چندین سرویس به طور همزمان خبر می‌دهد. EventBridge نیز گذرگاه رویدادهاست که اجازه می‌دهد سیستم‌های مختلف بر اساس الگوی داده‌ها به یکدیگر متصل شوند."},
+
+/* 17 */ {type:"divider", num:"۳", title:"بخش سوم: مقایسه عمیق فنی و اقتصادی",
+  p:"تحلیل مقایسه‌ای در ابعاد: ساختار کد و معماری · مدل‌های هزینه‌ای و مالی · شیوه مقیاس‌پذیری (Scalability) · نگهداری و پیچیدگی‌های عملیاتی (DevOps)",
+  notes:"وارد بخش سوم ارائه‌مان می‌شویم. در این بخش قصد داریم رویکرد Serverless را به صورت کاملاً علمی، فنی و عمیق در کنار دو رویکرد رایج دیگر، یعنی معماری‌های یکپارچه سنتی (Monolith) و کانتینرها (Microservices on Kubernetes) قرار داده و ابعاد مختلف آن‌ها را با هم مقایسه کنیم."},
+
+/* 18 */ {title:"تفکیک ساختاری: Monolith vs Serverless", kicker:"مقایسه ساختاری", kclass:"sec",
+  grid3:[
+    {h:"🧱 واحد توسعه", p:"یک کد یکپارچه عریض و طویل <b>در برابر</b> توابع ریز و مستقل."},
+    {h:"💥 استقلال سرویس‌ها", p:"در Monolith خطای یک ماژول <b>تمام برنامه</b> را می‌خواباند، اما در Serverless خطای یک تابع <b>ایزوله</b> است."},
+    {h:"🚀 استقرار (Deployment)", p:"استقرار سنگین و پرریسک Monolith <b>در برابر</b> استقرار مستقل و بی‌خطر یک تابع."}
+  ],
+  note:"🚢 تشبیه: Monolith یک <span class='hld'>کشتی بزرگ</span> است (اگر سوراخ شود، همه غرق می‌شوند) — Serverless یک <span class='hl3'>ناوگان از قایق‌های کوچک</span> است.",
+  notes:"مقایسه Monolithic و Serverless در واقع مقایسه دو دیدگاه کاملاً متفاوت است. در Monolith شما یک کشتی بزرگ دارید؛ اگر بدنه سوراخ شود، تمام کشتی غرق می‌شود. استقرار یک ویژگی جدید نیازمند کامپایل و تست کل کشتی است. اما در Serverless شما ناوگانی از قایق‌های کوچک و مستقل دارید. اگر یک قایق دچار مشکل شود، مابقی ناوگان به کار خود ادامه می‌دهند و آپدیت یک قایق هیچ خطری برای مابقی ندارد."},
+
+/* 19 */ {title:"کانتینرها (Kubernetes) در برابر Serverless (FaaS)", kicker:"مقایسه فنی", kclass:"sec",
+  list:[
+    ["🎛️","<b>میزان کنترل (Control):</b> K8s کنترل کامل روی OS، شبکه و پیکربندی می‌دهد؛ Serverless این کنترل را محدود می‌سازد.", "sub"],
+    ["🧠","<b>پیچیدگی مدیریت:</b> K8s نیازمند تخصص بالای DevOps برای مدیریت نودهاست؛ Serverless مدیریت زیرساخت ندارد.", "sub"],
+    ["💰","<b>هزینه بی‌کاری:</b> کانتینرها برای آماده‌باش نیازمند تخصیص منابع ثابت هستند؛ Serverless در بی‌کاری هزینه‌اش <span class='hl3'>صفر</span> است.", "sub"]
+  ],
+  notes:"بسیاری از مهندسان سوال می‌پرسند: آیا کوبرنتیز بهتر است یا Serverless؟ جواب این است که کوبرنتیز به شما قدرت کنترل کامل می‌دهد. شما می‌توانید تنظیمات کرنل سیستم‌عامل را دستکاری کنید، اما باید تاوان آن را با مدیریت پیچیده کلستر بدهید. در مقابل، Serverless بخشی از کنترل زیرساخت را از شما می‌گیرد اما در عوض سادگی مطلق، مقیاس‌پذیری بی‌دردسر و صفر شدن هزینه‌ها در زمان نبود ترافیک را به شما هدیه می‌دهد."},
+
+/* 20 */ {title:"مدل مالی: Provisioned vs Pay-per-Use", kicker:"مقایسه مدل هزینه‌ای", kclass:"warn",
+  grid2:[
+    {cls:"ad", h:"💳 پرداخت ظرفیتی (Provisioned)", p:"خرید سرور با رم و سی‌پیو مشخص.<br><br>پرداخت <b style='color:#f87171'>۱۰۰٪ هزینه</b> حتی در استفاده <b style='color:#f87171'>۱۰٪</b>."},
+    {cls:"a3", h:"📊 پرداخت مصرفی (Pay-per-Use)", p:"محاسبه دقیق بر اساس فرمول:"}
+  ],
+  formula:'Cost <span class="op">=</span> Requests <span class="op">×</span> Duration (ms) <span class="op">×</span> Memory (GB)',
+  notes:"مدل مالی این دو رویکرد کاملاً متفاوت است. در روش سنتی یا Provisioned، شما یک سرور با ۳۲ گیگابایت رم را ماهانه ۲۰۰ دلار اجاره می‌کنید، چه کاربر روی سایت باشد و چه شب‌ها هیچ درخواستی نیاید. اما در Serverless، فرمول محاسبه دقیقاً بر اساس مصرف واقعی است. اگر کدهای شما در طول یک ماه کلاً ۱۰۰ بار اجرا شوند، شما فقط هزینه همان چند ثانیه پردازش را می‌دهید که شاید چند سنت بیشتر نشود."},
+
+/* 21 */ {title:"مقایسه سرعت مقیاس‌پذیری (Scaling Velocity)", kicker:"مکانیزم‌های مقیاس‌پذیری", kclass:"sec",
+  grid2:[
+    {cls:"aw", h:"🐢 Auto-scaling سنتی", p:"• وابستگی به سنجه‌های CPU/RAM<br>• زمان واکنش: بین <b style='color:#fbbf24'>۳ تا ۱۰ دقیقه</b> برای بالا آمدن VMهای جدید"},
+    {cls:"a3", h:"⚡ Instant Scaling در Serverless", p:"• ایجاد کانتینر اختصاصی به ازای هر درخواست ورودی<br>• زمان واکنش: چند <b style='color:#34d399'>میلی‌ثانیه</b> (مقیاس آنی به هزاران اجرا)"}
+  ],
+  note:"🔥 سناریو: افزایش ناگهانی ۱۰۰ برابری ترافیک (Spike Traffic) — در سنتی سایت <span class='hld'>کرش</span> می‌کند، در Serverless پاسخ <span class='hl3'>آنی</span>.",
+  notes:"تصور کنید یک خبر ناگهانی منتشر شده و ترافیک وب‌سایت شما در یک دقیقه ۱۰۰ برابر می‌شود. در سیستم‌های سنتی، Auto-scaling شروع به تشخیص فشار روی CPU کرده، درخواست ماشین مجازی جدید داده، OS را بوت می‌کند و کانتینر را بالا می‌آورد که ۳ تا ۱۰ دقیقه طول می‌کشد و در این مدت سایت Crash کرده است. اما در Serverless به محض ورود درخواست‌ها، پلتفرم به صورت همزمان هزاران تابع مجزا ایجاد کرده و به پدیده‌ای به نام Spike Traffic پاسخ آنی می‌دهد."},
+
+/* 22 */ {title:"تحول در وظایف تیم‌های عملیاتی (DevOps)", kicker:"کاهش بار عملیاتی", kclass:"sec",
+  list:[
+    ["✂️","<b>حذف OS Security Patching</b>", "sub good"],
+    ["✂️","<b>حذف Capacity Planning</b> (پیش‌بینی ظرفیت آینده)", "sub good"],
+    ["✂️","<b>حذف مدیریت سخت‌افزار و شبکه فیزیکی</b>", "sub good"],
+    ["🎯","<b>انتقال تمرکز:</b> تغییر نقش Ops به سمت <span class='hl'>Security Policies، IAM و Observability</span>."]
+  ],
+  notes:"در رویکرد سنتی، بخش عظیمی از وقت تیم DevOps صرف کارهای تکراری مانند به‌روزرسانی سیستم‌عامل‌ها، اصلاح ثغور امنیتی سرور، تنظیم لودبالانسرها و پیش‌بینی ظرفیت سال آینده می‌شود. در Serverless این بار عملیاتی یا Ops Burden تقریباً به صفر می‌رسد. ارائه‌دهنده ابری امنیت زیرساخت را تضمین می‌کند و تیم DevOps می‌تواند تمام تمرکز خود را روی امنیت لایه کاربرد، تعریف دسترسی‌ها (IAM) و مانیتورینگ قرار دهد."},
+
+/* 23 */ {title:"مقایسه فرآیند استقرار نرم‌افزار", kicker:"پیچیدگی‌های استقرار", kclass:"sec",
+  grid2:[
+    {cls:"ad", h:"🐘 استقرار سنتی", p:"ساخت فایل‌های خروجی سنگین، تنظیم CI/CDهای پیچیده، مدیریت Canary یا Blue/Green Deployment با <b style='color:#f87171'>ریسک بالا</b>."},
+    {cls:"a3", h:"📦 استقرار Serverless", p:"آپلود یک فایل <b>Zip کوچک</b> یا Image سبک. استقرار و تست نسخه‌های مختلف یک تابع <b>به صورت مستقل</b> بدون کوچک‌ترین آسیب به سایر بخش‌ها."}
+  ],
+  note:"🔄 <b>Canary Deployment:</b> ارسال ۱۰٪ ترافیک به نسخه ۲.۰ و در صورت خطا، <span class='hl3'>بازگشت در یک ثانیه</span>.",
+  notes:"استقرار برنامه در روش سنتی همواره با ترس و ریسک همراه است. چون برنامه یکپارچه است، یک بروزرسانی کوچک ممکن است باعث از دست رفتن دسترسی کل سیستم شود. اما در Serverless، هر تابع آدرس و نسخه مستقل خود را دارد. شما می‌توانید یک تابع را آپدیت کنید، به آن نسخه 2.0 بدهید و تنها ۱۰ درصد ترافیک را به سمت آن بفرستید تا تست شود (Canary Deployment) و در صورت بروز خطا، در یک ثانیه ترافیک را به نسخه قبل برگردانید."},
+
+/* 24 */ {title:"پایداری توکار (Built-in High Availability)", kicker:"مقاومت در برابر خطا", kclass:"good",
+  grid2:[
+    {cls:"a3", h:"🌍 Multi-AZ by Default", p:"توزیع خودکار توابع در چندین دیتاسنتر (<b>Availability Zone</b>) بدون پیکربندی اضافی."},
+    {cls:"a3", h:"🩹 Self-Healing", p:"مکانیزم <b>خودترمیم</b>؛ اگر کانتینر اجرایی با خطا مواجه شود، پلتفرم کانتینر دیگری را جایگزین می‌کند."}
+  ],
+  note:"در Serverless کدهای شما به طور پیش‌فرض در <span class='hl3'>حداقل ۳ منطقه جغرافیایی مستقل</span> تکثیر می‌شوند — حتی اگر یک دیتاسنتر از دست برود.",
+  notes:"برای اینکه در معماری سنتی سیستم شما High Available باشد (یعنی با قطعی یک دیتاسنتر سایت نخوابد)، باید سرورهایی در چند منطقه جغرافیایی اجاره کرده و بین آن‌ها لودبالانسر و تنظیمات پیچیده DNS ست کنید. در Serverless، ارائه‌دهندگان ابری به طور پیش‌فرض کدهای شما را در حداقل ۳ منطقه جغرافیایی مستقل (Multi-AZ) تکثیر می‌کنند. اگر یک دیتاسنتر آمازون بر اثر زلزله از دست برود، کدهای شما بدون اینکه باخبر شوید روی دیتاسنتر دیگر اجرا می‌شوند."},
+
+/* 25 */ {title:"ظهور فرهنگ جدید: FinOps و تقویت نقش توسعه‌دهنده", kicker:"تأثیر بر فرهنگ DevOps", kclass:"sec",
+  grid2:[
+    {cls:"", h:"👨‍💻 توسعه‌دهندگان مستقل", p:"توانایی استقرار مستقیم سرویس‌ها <b>بدون منتظر ماندن</b> در صف تیم زیرساخت."},
+    {cls:"a3", h:"💸 پیوند کد و هزینه (FinOps)", p:"شفافیت کامل در هزینه‌ها؛ توسعه‌دهنده می‌بیند که چطور الگوریتم بهینه‌تر <b>مستقیماً صورت‌حساب مالی ماهانه</b> را کاهش می‌دهد."}
+  ],
+  note:"📈 نمونه واقعی: کاهش زمان اجرای تابع از ۵۰۰ به ۱۰۰ میلی‌ثانیه ← کاهش <span class='hl3'>۸۰٪</span> قبض ماهانه!",
+  notes:"معماری Serverless فرهنگ تازه‌ای به نام FinOps (عملیات مالی ابری) ایجاد کرده است. در سیستم‌های قدیم، برنامه نویس کدی می‌نوشت و اهمیتی نمی‌داد که چقدر CPU مصرف می‌کند، چون سرور ماهانه اجاره شده بود. اما در Serverless، بهبود یک حلقه For یا کاهش زمان اجرای تابع از ۵۰۰ میلی‌ثانیه به ۱۰۰ میلی‌ثانیه، مستقیماً قبوض پرداختی شرکت را ۸۰ درصد کاهش می‌دهد. این امر توسعه‌دهندگان را متعهد به نوشتن کدهای بهینه‌تر می‌سازد."},
+
+/* 26 */ {title:"جدول خلاصه مقایسه: Bare-Metal vs K8s vs Serverless", kicker:"جمع‌بندی مقایسه‌ای", kclass:"sec",
+  table:{
+    head:["ویژگی","Bare-Metal / VM","کانتینرها (Kubernetes)","معماری Serverless"],
+    rows:[
+      ["مدیریت زیرسافت","<span class='pill p-bad'>بسیار سنگین</span>","<span class='pill p-mid'>متوسط تا بالا</span>","<span class='pill p-ok'>صفر (توسط سرویس‌دهنده)</span>"],
+      ["سرعت Scaling","<span class='pill p-bad'>دقیقه</span>","<span class='pill p-mid'>ثانیه</span>","<span class='pill p-ok'>میلی‌ثانیه</span>"],
+      ["مدل هزینه","<span class='pill p-bad'>ثابت ماهانه</span>","<span class='pill p-mid'>ثابت + متغیر</span>","<span class='pill p-ok'>کاملاً متغیر (Pay-per-Use)</span>"],
+      ["کنترل محیط اجرا","<span class='pill p-ok'>۱۰۰ درصد</span>","<span class='pill p-ok'>بسیار بالا</span>","<span class='pill p-mid'>محدود به پلتفرم ابری</span>"],
+      ["Cold Start","<span class='pill p-ok'>ندارد</span>","<span class='pill p-mid'>بسیار ناچیز</span>","<span class='pill p-bad'>وجود دارد</span>"]
+    ]
+  },
+  notes:"این جدول یک دید جامع و جمع‌بندی کلی از مقایسه سه نسل رایانش به ما می‌دهد. همانطور که مشاهده می‌کنید، هیچ معماری مطلقاً کامل نیست. Serverless در زمینه حذف مدیریت زیرساخت، سرعت مقیاس‌پذیری و مدل هزینه‌ای برنده قاطع است؛ اما در مقابل، میزان کنترل شما روی سیستم‌عامل را محدود می‌کند و پدیده‌ای به نام Cold Start را وارد معادلات می‌کند که در VMها وجود نداشت."},
+
+/* 27 */ {title:"بخش چهارم: اکوسیستم AWS", kicker:"اکوسیستم AWS Serverless", kclass:"sec",
+  list:[
+    ["λ","<b>AWS Lambda:</b> پیشروترین و پخته‌ترین سرویس FaaS در دنیا (معرفی در ۲۰۱۴)."],
+    ["🚪","<b>Amazon API Gateway:</b> درگاه ورود برای تبدیل درخواست‌های HTTP به رویدادهای Lambda."],
+    ["🔗","<b>AWS Step Functions:</b> ابزار ارکستراسیون و ساخت جریان کاری (Workflow) بین توابع."]
+  ],
+  notes:"وارد بخش چهارم می‌شویم؛ بررسی اکوسیستم‌ها. شرکت آمازون (AWS) با معرفی AWS Lambda در سال ۲۰۱۴ رسماً عصر Serverless را آغاز کرد. اکوسیستم آمازون بی‌تردید غنی‌ترین ابزارها را دارد. ترکیب API Gateway برای دریافت درخواست‌های وب، AWS Lambda برای پردازش و Step Functions برای مدیریت جریان‌های کاری پیچیده (مثلاً فرآیند خرید، ثبت سفارش و پرداخت)، یک پلتفرم کامل را در اختیار شرکت‌ها قرار می‌دهد."},
+
+/* 28 */ {title:"سرویس‌های Serverless شرکت گوگل (GCP)", kicker:"اکوسیستم Google Cloud", kclass:"sec",
+  grid3:[
+    {h:"▶️ Google Cloud Run", p:"اجرای کانتینرهای Docker به صورت Serverless با قابلیت <b>Scale to Zero</b>."},
+    {h:"⚡ Cloud Functions", p:"سرویس <b>FaaS خالص</b> گوگل جهت پاسخ به رویدادها."},
+    {h:"🔥 Firebase Ecosystem", p:"ابزارهای فوق‌العاده برای <b>توسعه‌دهندگان موبایل</b>."}
+  ],
+  note:"Cloud Run پل ارتباطی عالی بین دنیای <span class='hl'>کانتینرها</span> و <span class='hl2'>Serverless</span> است.",
+  notes:"گوگل رویکرد بسیار جذابی در حوزه Serverless دارد. سرویس شاهکار گوگل، Cloud Run نام دارد. این سرویس به شما اجازه می‌دهد هر نوع برنامه‌ای را در قالب یک کانتینر Docker بسته‌بندی کنید، اما گوگل آن کانتینر را به صورت Serverless اجرا می‌کند؛ یعنی اگر ترافیک نباشد به صفر مقیاس می‌شود (Scale to Zero) و با آمدن ترافیک آنی بالا می‌آید. این ابزار پل ارتباطی عالی بین دنیای کانتینرها و Serverless است."},
+
+/* 29 */ {title:"ابزارهای مایکروسافت آژور (Azure)", kicker:"اکوسیستم Microsoft Azure", kclass:"sec",
+  grid3:[
+    {h:"🟦 Azure Functions", p:"پشتیبانی بی‌نظیر از اکوسیستم <b>.NET و C#</b> در کنار سایر زبان‌ها."},
+    {h:"🔀 Azure Logic Apps", p:"ساخت جریان‌های کاری هوشمند به صورت <b>Low-Code/No-Code</b>."},
+    {h:"🌍 Cosmos DB", p:"دیتابیس نوآورانه جهانی مایکروسافت با <b>حالت Serverless</b>."}
+  ],
+  note:"⭐ قدرت Azure: قابلیت <span class='hl'>Bindings</span> — تنها با افزودن چند Annotation، تابع به صف‌ها و دیتابیس‌ها متصل می‌شود <b>بدون نوشتن کد اتصال</b>.",
+  notes:"مایکروسافت آژور قدرتمندترین گزینه برای سازمان‌ها و شرکت‌هایی است که از قبل در اکوسیستم مایکروسافت و زبان C# یا .NET فعالیت داشته‌اند. Azure Functions به دلیل قابلیت Bindings قدرتمند، به توسعه‌دهنده اجازه می‌دهد تنها با افزودن چند Annotation به کد، تابع خود را به صف‌ها، دیتابیس‌ها و سرویس‌های دیگر متصل کند بدون اینکه کدی برای اتصال بنویسد."},
+
+/* 30 */ {title:"پردازش Serverless در لبه شبکه (Edge Computing)", kicker:"ظهور Edge-Serverless", kclass:"good",
+  list:[
+    ["🌐","<b>مفهوم:</b> اجرای کد در نزدیک‌ترین فاصله جغرافیایی به کاربر (در CDNها) به جای دیتاسنترهای مرکزی."],
+    ["Workers","<b>Cloudflare Workers:</b> استفاده از موتور <span class='hl'>V8 Isolates</span> به جای Docker جهت کاهش Cold Start به <span class='hl3'>زیر ۱ میلی‌ثانیه</span>.", "sub"],
+    ["▲","<b>Vercel & Netlify:</b> پلتفرم‌های مدرن برای استقرار برنامه‌های <span class='hl2'>Next.js و React</span>.", "sub"]
+  ],
+  notes:"جدیدترین موج فناوری، ترکیب Serverless با Edge Computing است. شرکت‌هایی مثل Cloudflare با معرفی Cloudflare Workers مفهوم جدیدی خلق کرده‌اند. در این مدل، کد شما روی دیتاسنترهای مرکزی اجرا نمی‌شود، بلکه روی مجهزترین نودهای CDN در ۳۰۰ شهر دنیا اجرا می‌گردد. استفاده از تکنولوژی V8 Isolates باعث شده Cold Start عملاً نابود شده و زمان پاسخگویی به کمتر از ۱۰ میلی‌ثانیه برسد."},
+
+/* 31 */ {title:"فریم‌ورک‌های معروف برای توسعه و استقرار", kicker:"فریم‌ورک‌های توسعه Serverless", kclass:"sec",
+  grid3:[
+    {h:"🛠️ Serverless Framework (SST)", p:"محبوب‌ترین فریم‌ورک <b>مستقل از سرویس‌دهنده (Multi-cloud)</b>."},
+    {h:"AWS SAM", p:"فریم‌ورک <b>بومی و اختصاصی آمازون</b> (Serverless Application Model)."},
+    {h:"AWS CDK", p:"توسعه زیرساخت با کد (IaC) با زبان‌های واقعی مانند <b>TypeScript و Python</b>."}
+  ],
+  note:"🚫 نوشتن دستی کدهای Serverless و پیکربندی در پنل ابری <span class='hld'>کار اشتباهی</span> است ← راه درست: <span class='hl'>Infrastructure as Code (IaC)</span>",
+  notes:"نوشتن دستی کدهای Serverless و پیکربندی آن‌ها در پنل ابری کار اشتباهی است. برای مدیریت این پروژه‌ها از ابزارهای Infrastructure as Code (IaC) استفاده می‌شود. فریم‌ورک Serverless Framework به شما اجازه می‌دهد در یک فایل yml ساده، تمام توابع، APIها و دیتابیس‌ها را تعریف کرده و با یک دستور deploy کل زیرساخت را در چند ثانیه روی ابر مستقر کنید. AWS CDK نیز اجازه می‌دهد با کدهای TypeScript یا Python زیرساخت ابری بسازید."},
+
+/* 32 */ {title:"چالش توسعه محلی و راهکارهای آن", kicker:"تست و شبیه‌سازی محلی", kclass:"sec",
+  grid3:[
+    {h:"🐳 LocalStack", p:"شبیه‌ساز کامل سرویس‌های AWS به صورت <b>Dockerized</b> روی سیستم توسعه‌دهنده."},
+    {h:"🧪 SAM CLI Local", p:"اجرای توابع Lambda در <b>کانتینرهای محلی</b> برای دیباگ پیش از استقرار."},
+    {h:"🎯 راهبرد تست", p:"<b>Unit Test</b>های ایزوله + <b>Integration Test</b> در محیط‌های ابری ephemeral."}
+  ],
+  notes:"یکی از سوالات مهم توسعه‌دهندگان این است: «چگونه وقتی اینترنت نداریم یا روی سیستم شخصی هستیم، کدهای وابسته‌به ابر را تست کنیم؟» ابزارهایی مانند LocalStack تمام سرویس‌های AWS مثل S3، Lambda و DynamoDB را روی سیستم شما شبیه‌سازی می‌کنند. شما می‌توانید کدهای خود را کاملاً به صورت محلی تست کرده، دیباگ کنید و مطمئن شوید که پس از استقرار روی ابر واقعی بدون مشکل کار خواهند کرد."},
+
+/* 33 */ {title:"قابلیت مشاهده و ردیابی در سیستم‌های توزیع‌شده", kicker:"پایش و مانیتورینگ (Observability)", kclass:"sec",
+  list:[
+    ["🔍","<b>چالش:</b> سختی پیدا کردن باگ‌ها در میان ده‌ها تابع توزیع‌شده."],
+    ["🧭","<b>AWS X-Ray:</b> ردیابی (Distributed Tracing) مسیر درخواست‌ها از API تا دیتابیس.", "sub"],
+    ["📊","<b>ابزارهای تخصصی:</b> Datadog، Lumigo و Thundra برای تصویرسازی گرافیکی جریان رویدادها.", "sub"]
+  ],
+  note:"مثال: یک درخواست ممکن است از <span class='hl'>۵ تابع، ۲ صف و ۲ دیتابیس</span> عبور کند — ابزارها به هر درخواست یک <span class='hl2'>ID منحصر به فرد</span> تخصیص می‌دهند.",
+  notes:"در یک سیستم Monolith، خواندن فایل Log سرور برای پیدا کردن باگ کافی بود. اما در Serverless، یک درخواست کاربر ممکن است از ۵ تابع، ۲ صف و ۲ دیتابیس عبور کند. به این چالش، چالش Observability می‌گویند. برای حل آن از ابزارهای Distributed Tracing مانند AWS X-Ray استفاده می‌شود. این ابزارها یک ID منحصر به فرد به هر درخواست تخصیص می‌دهند و نقشه‌ای گرافیکی از کل مسیر طی‌شده توسط درخواست به همراه زمان اجرای هر بخش ارائه می‌دهند."},
+
+/* 34 */ {title:"اصول امنیتی تخصصی Serverless", kicker:"امنیت در معماری Serverless", kclass:"warn",
+  list:[
+    ["🔑","<b>Principle of Least Privilege</b> (کمترین سطح دسترسی): تعریف IAM Role اختصاصی برای هر تابع.", "sub"],
+    ["🤫","<b>Secrets Management:</b> عدم ذخیره کلیدهای حساس در کد؛ استفاده از <span class='hl'>AWS Secrets Manager</span>.", "sub"],
+    ["🛡️","<b>Function Level Security:</b> بررسی و اسکن کدهای برنامه‌نویسی جهت جلوگیری از حملات <span class='hld'>Injection</span> در لایه تابع.", "sub"]
+  ],
+  notes:"اگرچه امنیت زیرساخت و سیستم‌عامل در Serverless بر عهده ارائه‌دهنده ابری است، اما امنیت کد و دسترسی‌ها کماکان بر عهده ماست. مهم‌ترین اصل امنیتی در Serverless، اصل «کمترین دسترسی» است. نباید یک دسترسی کلی به همه توابع داد. اگر تابعی فقط نیاز به خواندن یک فایل از S3 دارد، IAM Role آن باید فقط و فقط مجوز Read روی همان باکت خاص را داشته باشد تا در صورت نفوذ، سایر بخش‌ها ایمن بمانند."},
+
+/* 35 */ {title:"بخش پنجم: کاربردها - پردازش تصویر و ویدیو", kicker:"سناریو ۱: پردازش Real-time فایل", kclass:"sec",
+  flow:[
+    ["قدم ۱","کاربر یک تصویر با کیفیت بالا در باکت <b>S3</b> آپلود می‌کند."],
+    ["قدم ۲","باکت S3 فوراً یک Event به نام <b>ObjectCreated</b> صادر می‌کند."],
+    ["قدم ۳","تابع <b>Lambda</b> بیدار شده، تصویر را Resized کرده و Thumbnail آن را ذخیره می‌کند."]
+  ],
+  notes:"وارد بخش پنجم شویم: بررسی سناریوهای واقعی. اولین و کلاسیک‌ترین سناریو، پردازش فایل است. تصور کنید شبکه‌ای مانند اینستاگرام دارید. کاربران در هر لحظه هزاران عکس آپلود می‌کنند. با Serverless، به محض قرار گرفتن عکس در ذخیره‌ساز، تابع Lambda بیدار شده، سه سایز مختلف از تصویر می‌سازد، آن را فشرده می‌کند، در دیتابیس ثبت می‌نماید و خاموش می‌شود. سرور فقط در همان چند ثانیه پردازش هزینه می‌برد."},
+
+/* 36 */ {title:"کاربرد دوم: ساخت Backend سرویس‌ها", kicker:"سناریو ۲: RESTful APIهای وب و موبایل", kclass:"sec",
+  flow:[
+    ["معماری","<b>API Gateway</b> + <b>AWS Lambda</b> + <b>DynamoDB</b>"],
+    ["مزیت ۱","پاسخگویی خودکار به <b>نوسانات شدید ترافیک</b>."],
+    ["مزیت ۲","عدم نیاز به نگهداری سرورهای <b>Nginx یا Apache</b>."],
+    ["مزیت ۳","جداسازی کامل <b>EndPoint</b>های مختلف از یکدیگر."]
+  ],
+  notes:"سناریوی دوم، ساخت بک‌اند وب‌سایت‌ها و اپلیکیشن‌های موبایل است. درخواست کاربر از طریق اینترنت به API Gateway می‌رسد. API Gateway بررسی می‌کند که درخواست مربوط به کدام مسیر (Route) است و تابع Lambda مربوط به همان مسیر (مثلاً ثبت‌نام کاربر یا دریافت لیست محصولات) را فراخوانی می‌کند. این معماری به راحتی می‌تواند تا میلیون‌ها کاربر همزمان مقیاس پذیرد بدون اینکه نیازی به تنظیم لودبالانسر داشته باشد."},
+
+/* 37 */ {title:"کاربرد سوم: جریان داده‌های زنده و ETL", kicker:"سناریو ۳: پردازش داده‌های حجیم", kclass:"sec",
+  flow:[
+    ["📥 دریافت","میلیون‌ها دیتای سنسورهای IoT یا لوگ‌های سیستمی از طریق <b>Amazon Kinesis</b>"],
+    ["⚙️ پردازش","توابع Lambda داده‌ها را به صورت زنده <b>پاکسازی، فیلتر و تبدیل</b> می‌کنند"],
+    ["💾 ذخیره‌سازی","قرار دادن داده‌های نهایی در <b>Data Lake</b> (Redshift یا S3)"]
+  ],
+  notes:"در دنیا داده‌های بزرگ (Big Data)، سیستم‌ها با سیل عظیمی از داده‌های سنسورها یا لوگ‌های نرم‌افزاری مواجه هستند. با استفاده از Serverless می‌توان یک خط لوله ETL (استخراج، تبدیل، بارگذاری) بدون سرور ساخت. داده‌ها وارد سرویس استریم شده، توابع Serverless آن‌ها را به صورت تکه‌تکه در چند میلی‌ثانیه پردازش و تحلیل کرده و داده‌های تمیز را درون دیتابیس‌های تحلیلی می‌ریزند."},
+
+/* 38 */ {title:"کاربرد چهارم: اتوماسیون و کارهای زمان‌بندی‌شده", kicker:"سناریو ۴: اتوماسیون و Cron Jobها", kclass:"sec",
+  grid2:[
+    {cls:"ad", h:"🐘 روش سنتی", p:"روشن نگه داشتن یک سرور <b>EC2 اختصاصی ۲۴ ساعته</b> برای اجرای یک اسکریپت در ساعت ۲ بامداد!"},
+    {cls:"a3", h:"⚡ روش Serverless", p:"استفاده از <b>EventBridge Cron Rule + AWS Lambda</b><br><br>نتیجه: اجرای دقیق، خاموشی بلافاصله و <b style='color:#34d399'>کاهش ۹۹٪ هزینه‌ها</b>."}
+  ],
+  notes:"همه سازمان‌ها کارهای زمان‌بندی‌شده (Cron Job) دارند؛ مانند ارسال ایمیل‌های هفتگی، پشتیبان‌گیری شبانه از دیتابیس یا محاسبه حقوق و دستمزد در انتهای ماه. در رویکرد سنتی، شرکتی مجبور بود یک سرور را تمام ۳۰ روز ماه روشن نگه دارد تا فقط ۱ ساعت در ماه کار انجام دهد! با Serverless، شما یک Rule زمان‌بندی می‌سازید که سر ساعت مشخص تابع را روشن کرده، کار را انجام داده و سرور نابود می‌شود."},
+
+/* 39 */ {title:"الگوهای طراحی: الگوی درگاه API", kicker:"API Gateway Pattern", kclass:"sec",
+  grid3:[
+    {h:"🛣️ Routing", p:"هدایت درخواست به <b>تابع مربوطه</b>."},
+    {h:"🚦 Rate Limiting / Throttling", p:"جلوگیری از حملات <b>DDoS</b> و سرریز شدن توابع."},
+    {h:"⚡ Caching", p:"پاسخگویی مستقیم به درخواست‌های تکراری <b>بدون درگیر کردن Lambda</b>."}
+  ],
+  note:"🚪 درگاه API مانند یک <span class='hl'>نگهبان دم در</span> عمل می‌کند — علاوه بر Routing، احراز هویت اولیه را نیز انجام می‌دهد.",
+  notes:"در طراحی سیستم‌های Serverless، استفاده از الگوی API Gateway الزامی است. درگاه API مانند یک نگهبان دم در عمل می‌کند. این درگاه نه تنها درخواست‌ها را به توابع مربوطه متصل می‌کند، بلکه می‌تواند ترافیک‌های مخرب را بلاک کند (Throttling)، درخواست‌های تکراری را از حافظه Cache پاسخ دهد تا هزینه‌های اجرای تابع کاهش یابد و عملیات احراز هویت اولیه را انجام دهد."},
+
+/* 40 */ {title:"الگوی پردازش موازی: Fan-out / Fan-in", kicker:"الگوی طراحی", kclass:"sec",
+  grid2:[
+    {cls:"", h:"📤 Fan-out", p:"پخش یک پیام بین ده‌ها صف یا موضوع جهت بیدار کردن همزمان <b>صدها تابع Lambda</b> برای پردازش موازی."},
+    {cls:"a3", h:"📥 Fan-in", p:"تجمیع و ترکیب خروجی‌های پردازش‌شده توسط یک <b>تابع نهایی</b> جهت ارائه پاسخ تکمیلی."}
+  ],
+  note:"مثال: کار سنگین به ۱۰۰۰ تکه تقسیم می‌شود ← <span class='hl3'>۱۰۰۰ تابع موازی</span> هر کدام ۱ ثانیه کار می‌کنند ← کل پردازش در <b>۱ ثانیه</b>!",
+  notes:"وقتی با یک پردازش بسیار سنگین مواجه هستیم که به صورت تک‌نخی (Single-thread) زمان زیادی می‌برد، الگوی Fan-out در Serverless معجزه می‌کند. شما کار سنگین را به ۱۰۰۰ تکه کوچک تبدیل می‌کنید و یک رویداد SNS صادر می‌نمایید. فوراً ۱۰۰۰ تابع Lambda به صورت موازی روشن شده و هر کدام یک تکه کار را در ۱ ثانیه انجام می‌دهند. سپس الگوی Fan-in نتایج این ۱۰۰۰ تابع را جمع‌آوری کرده و خروجی را آماده می‌سازد."},
+
+/* 41 */ {title:"بررسی بنچمارک و مهاجرت شرکت‌های بزرگ", kicker:"مطالعه موردی واقعی (Case Study)", kclass:"good",
+  grid2:[
+    {cls:"a3", h:"🥤 Case Study 1 — Coca-Cola", p:"مهاجرت سیستم ماشین‌های فروش خودکار (Vending Machines) به Serverless و کاهش هزینه سالانه:<br><br><b style='color:#f87171;font-size:22px'>$130,000</b> ← <b style='color:#34d399;font-size:22px'>$30,000</b>"},
+    {cls:"", h:"📊 Case Study 2 — FINRA", p:"نهاد تنظیم مقررات مالی آمریکا؛ پردازش <b>روزانه نیم میلیارد رکورد معاملاتی</b> با AWS Lambda.<br><br>کاهش زمان آنالیز از <b>چند روز</b> به <b>چند دقیقه</b>."}
+  ],
+  notes:"نگاهی به داده‌های واقعی بیندازیم. شرکت کوکاکولا سیستم پرداخت ماشین‌های فروش خودکار خود را به Serverless منتقل کرد. ماشین‌ها فقط زمانی هزینه ایجاد می‌کردند که مشتری خریدی انجام می‌داد. این کار هزینه‌های زیرساخت آن‌ها را بیش از ۷۰ درصد کاهش داد. همچنین نهاد FINRA که تحلیل‌های مالی پیچیده انجام می‌دهد، با استفاده از قدرت مقیاس‌پذیری همزمان توابع Lambda توانست سرعت آنالیز داده‌های بورس را از چند روز به چند دقیقه کاهش دهد."},
+
+/* 42 */ {title:"سناریوی نمونه: تحلیل هزینه واقعی یک اپلیکیشن", kicker:"تحلیل مالی و مقایسه عددی", kclass:"warn",
+  note:"<b>فرضیات:</b> ۱ میلیون درخواست در ماه · زمان اجرای ۲۰۰ میلی‌ثانیه · ۵۱۲ مگابایت رم",
+  stats:[
+    {n:"$80–120", l:"هزینه روش <b>سنتی</b><br>(۲ سرور EC2 جهت HA) در ماه", c:"r"},
+    {n:"$0.20", l:"هزینه <b>AWS Lambda</b><br>(با احتساب Free Tier) در ماه!", c:"g"}
+  ],
+  notes:"بیایید یک محاسبه ریاضی واقعی انجام دهیم. اگر پروژه‌ای داشته باشید که در ماه ۱ میلیون بار فراخوانی شود و هر بار ۲۰۰ میلی‌ثانیه طول بکشد، در روش سنتی برای اینکه لودبالانسر و حداقل دو سرور برای قطع نشدن داشته باشید، باید ماهیانه ۱۰۰ دلار بپردازید. اما در AWS Lambda، به دلیل وجود لایه رایگان (Free Tier) و فرمول محاسباتی دقیق، هزینه پردازش این ۱ میلیون درخواست حتی به ۱ دلار هم نمی‌رسد و حدود ۲۰ سنت خواهد بود!"},
+
+/* 43 */ {type:"divider", num:"۶", title:"بخش ششم: چالش Vendor Lock-in",
+  p:"<b>معضل:</b> سخت بودن مهاجرت کدها و زیرساخت از یک ارائه‌دهنده ابری (مثلاً AWS) به ارائه‌دهنده دیگر (مثلاً GCP)<br><br><b>علت اصلی:</b> وابستگی شدید کدهای Serverless به SDKها و سرویس‌های بومی ابری<br><br><b>راهکارها:</b> استفاده از ابزارهای Multi-cloud · نوشتن کدهای ایزوله به روش Hexagonal Architecture",
+  notes:"وارد بخش پایانی می‌شویم: نقد و چالش‌ها. بزرگ‌ترین چالش معماری Serverless، پدیده‌ای به نام Vendor Lock-in است. وقتی شما کدهای خود را کاملاً بر اساس سرویس‌های اختصاصی آمازون مانند DynamoDB و EventBridge می‌نویسید، اگر روزی بخواهید برنامه را به گوگل کلود یا سرورهای داخلی منتقل کنید، بازنویسی بخش زیادی از پروژه الزامی است. برای حل این مشکل باید کدهای منطق تجاری را از کدهای SDK ابری تفکیک کرد."},
+
+/* 44 */ {title:"پیچیدگی خطایابی و تست یکپارچگی", kicker:"چالش‌های دیباگ و تست", kclass:"warn",
+  list:[
+    ["🚫","<b>عدم امکان Breakpoint خط به خط:</b> دیباگ مستقیم روی کانتینرهای ابری زنده امکان‌پذیر نیست.", "bad"],
+    ["🧩","<b>تست Integration پیچیده:</b> تست همزمان تعامل ده‌ها تابع و صف ابری در محیط محلی سخت است.", "bad"],
+    ["📝","<b>وابستگی شدید به Logging:</b> اتکای کامل به سرویس‌هایی مثل CloudWatch برای کشف منشا خطاها.", "warnb"]
+  ],
+  notes:"دیباگ کردن در Serverless رفتار متفاوتی دارد. شما دیگر نمی‌توانید IDE خود را به سرور متصل کرده و خط به خط کد را Breakpoint بگذارید و متغیرها را ببینید. تنها راه شما، بررسی لوگ‌های تولید شده در سیستم‌های مانیتورینگ است. همچنین به دلیل توزیع‌شده بودن برنامه، پیدا کردن اینکه خطا در کدام تابع یا صف رخ داده، نیازمند ابزارها و انضباط بالای مهندسی است."},
+
+/* 45 */ {title:"چالش پردازش‌های طولانی‌مدت (Long-running Tasks)", kicker:"محدودیت‌های زمان اجرا", kclass:"warn",
+  stats:[
+    {n:"۱۵ دقیقه", l:"حداکثر زمان اجرای یک تابع در <b>AWS Lambda</b>", c:"r"},
+    {n:"❌", l:"مناسب نبودن FaaS برای رندر ویدیوهای چند ساعته یا پردازش سنگین AI", c:""},
+    {n:"Fargate", l:"راهکار: استفاده از <b>AWS Fargate</b> یا سرویس‌های کانتینری غیرزمان‌دار", c:"g"}
+  ],
+  notes:"یکی از محدودیت‌های صریح توابع FaaS، محدودیت زمان اجراست. در AWS Lambda یک تابع می‌تواند حداکثر ۱۵ دقیقه روشن بماند و پس از ۱۵ دقیقه، پلتفرم به صورت اجباری پردازش را قطع می‌کند. بنابراین، اگر پروژه‌ای دارید که نیازمند پردازش‌های چند ساعته مداوم است (مانند آموزش مدل‌های عمیق هوش مصنوعی)، نباید از FaaS استفاده کنید و باید به سراغ سرویس‌های کانتینری بروید."},
+
+/* 46 */ {title:"خطرات مالی ناشی از اشتباهات برنامه‌نویسی", kicker:"ریسک افزایش ناگهانی هزینه‌ها (Cost Spikes)", kclass:"warn",
+  list:[
+    ["🔁","<b>خطر حلقه بی‌نهایت (Infinite Loop):</b> فراخوانی چرخه‌ای و متقابل دو تابع به یکدیگر.", "bad"],
+    ["💸","<b>نتیجه:</b> روشن شدن میلیون‌ها تابع در چند دقیقه و ایجاد <span class='hld'>قبوض چند هزار دلاری</span>!", "bad"],
+    ["🎚️","<b>راهکار ۱:</b> تنظیم Concurrency Limits روی توابع.", "good"],
+    ["🛑","<b>راهکار ۲:</b> فعال‌سازی <span class='hl'>AWS Budgets</span> جهت قطع خودکار سرویس پس از عبور از سقف بودجه.", "good"]
+  ],
+  notes:"از آنجا که Serverless به صورت ناگهانی به بی‌نهایت مقیاس می‌پذیرد، این ویژگی مثبت می‌تواند تبدیل به یک تهدید مالی شود! اگر برنامه‌نویس خطایی کند و یک حلقه بی‌نهایت بنویسد (مثلاً تابع A یک Event به تابع B بدهد و تابع B دوباره همان Event را به تابع A برگرداند)، پلتفرم ابری میلیون‌ها کانتینر روشن می‌کند و ممکن است در عرض چند ساعت یک قبض چند هزار دلاری روی دست شما بگذارد! برای جلوگیری، حتماً باید سقف مصرف تعیین کرد."},
+
+/* 47 */ {title:"ضدمودل‌ها (Anti-patterns) در انتخاب Serverless", kicker:"چه زمان‌هایی نباید استفاده کرد؟", kclass:"warn",
+  list:[
+    ["📌","<b>ترافیک کاملاً ثابت و ۲۴ ساعته:</b> در ترافیک‌های بسیار بالا و یکنواخت، سرورهای VM <span class='hld'>ارزان‌تر</span> تمام می‌شوند.", "bad"],
+    ["⏱️","<b>حساسیت شدید به Latency</b> (تک‌رقمی میلی‌ثانیه): عدم تحمل تاخیر Cold Start.", "bad"],
+    ["🔧","<b>نیاز به تنظیمات اختصاصی سیستم‌عامل</b> و نصب ماژول‌های خاص کرنل.", "bad"]
+  ],
+  notes:"با وجود تمام تعریف‌ها، Serverless کلید حل تمام مشکلات نیست! اگر شما برنامه‌ای دارید که ترافیک آن کاملاً یکنواخت است (مثلاً ۲۴ ساعته ۱۰۰ درصد CPU زیر بار است)، هزینه Serverless از سرورهای اختصاصی بیشتر خواهد شد. همچنین اگر در پروژه‌های مالی حساس کار می‌کنید که حتی تاخیر ۵۰ میلی‌ثانیه‌ای Cold Start قابل قبول نیست، یا نیاز به نصب درایور خاصی روی سیستم‌عامل دارید، نباید از Serverless استفاده کنید."},
+
+/* 48 */ {title:"چک‌لیست معمار نرم‌افزار: آیا Serverless مناسب شماست؟", kicker:"چک‌لیست تصمیم‌گیری", kclass:"good",
+  check:[
+    ["آیا ترافیک برنامه شما نوسانی و غیرقابل پیش‌بینی است؟","بله = Serverless","yes"],
+    ["آیا تیم DevOps کوچک دارید و می‌خواهید تمرکز روی منطق برنامه باشد؟","بله = Serverless","yes"],
+    ["آیا مدل پردازش داده‌های شما رویدادمحور است؟","بله = Serverless","yes"],
+    ["آیا سرعت عرضه به بازار (Time-to-Market) اولویت اول است؟","بله = Serverless","yes"],
+    ["آیا سیستم شما پردازش‌های طولانی بالای ۱۵ دقیقه دارد؟","بله = سنتی / کانتینر","no"]
+  ],
+  notes:"این اسلاید به عنوان یک راهنمای عملی برای معماران نرم‌افزار طراحی شده است. پیش از شروع هر پروژه، با پاسخ به این ۵ پرسش کلیدی می‌توانید تصمیم بگیرید که آیا پروژه شما کاندیدای مناسبی برای Serverless است یا خیر. اگر اکثر پاسخ‌های شما مثبت باشد، انتخاب Serverless بهینه‌ترین، سریع‌ترین و اقتصادی‌ترین راهکار خواهد بود."},
+
+/* 49 */ {title:"آینده معماری Serverless به کجا می‌رود؟", kicker:"دورنمای آینده (Future Trends)", kclass:"good",
+  grid3:[
+    {h:"🤖 Serverless AI & LLMs", p:"فراخوانی مدل‌های هوش مصنوعی بزرگ به صورت توابع <b>بدون درگیر شدن با GPUهای گران‌قیمت</b>."},
+    {h:"🕸️ WebAssembly (Wasm)", p:"جایگزینی Wasm با Docker جهت <b>صفر کردن زمان Cold Start</b> در Edge."},
+    {h:"Stateful Serverless", p:"ظهور فریم‌ورک‌های جدید برای <b>مدیریت هوشمندانه وضعیت‌ها</b> بدون پیچیدگی."}
+  ],
+  notes:"در نهایت نگاهی به آینده داشته باشیم. آینده رایانش ابری کاملاً به سمت انتزاعی‌تر شدن پیش می‌رود. با ظهور WebAssembly زمان اجرای کانتینرها به صفر نزدیک می‌شود. همچنین ترکیب هوش مصنوعی مولد با Serverless به توسعه‌دهندگان اجازه می‌دهد بدون اجاره سرورهای گران‌قیمت GPU، مدل‌های هوش مصنوعی را در قالب یک API بدون سرور صدا بزنند و فرایندهای هوشمند بسازند."},
+
+/* 50 */ {type:"title", title:"نتیجه‌گیری و پایان ارائه",
+  sub:"Serverless یک تغییر پارادایم از «مدیریت زیرساخت» به سمت «ارزش‌آفرینی تجاری» است.",
+  meta:[["ارائه‌دهنده","میلاد طحانیان فینی"],["استاد راهنما","استاد محمدرضا باباولیان"],["دانشگاه","دانشگاه ملی مهارت شهید رجایی کاشان"],["بخش پایانی","پرسش و پاسخ (Q&A)"]],
+  note:"🙏 آماده پاسخگویی به سوالات استاد محترم و دانشجویان عزیز.",
+  notes:"به عنوان جمع‌بندی نهایی، Serverless صرفاً یک ابزار یا یک سرویس ابری جدید نیست؛ بلکه یک تغییر پارادایم فکری در نحوه ساخت نرم‌افزار است که به ما اجازه می‌دهد تفکر «سرورمحور» را کنار گذاشته و تمام انرژی خود را صرف حل مسئله اصلی و ایجاد ارزش برای کاربر نهایی کنیم. از صبر، شکیبایی و توجه شما استاد گرامی جناب آقای باباولیان و همکلاسی‌های عزیز صمیمانه سپاسگزارم. اکنون در خدمت شما هستم تا به پرسش‌ها و نظرات شما پاسخ دهم."}
+];
+
+/* ---------------- Rendering ---------------- */
+const stage = document.getElementById('stage');
+const esc = s => s;
+
+function renderSlide(s, i){
+  const n = i+1;
+  let html = `<div class="slide" data-i="${i}">
+    <div class="slide-num">اسلاید ${n} از ${slides.length}</div>`;
+
+  if(s.type === "title"){
+    html += `<div class="title-slide">
+      <div class="logo">☁️</div>
+      <h1>${s.title}</h1>
+      <div class="sub">${s.sub||""}</div>
+      <div class="meta">${(s.meta||[]).map(m=>`<div class="m"><span>${m[0]}</span><b>${m[1]}</b></div>`).join("")}</div>
+      ${s.note?`<div class="note">${s.note}</div>`:""}
+    </div>`;
+  }
+  else if(s.type === "divider"){
+    html += `<div class="divider">
+      <div class="big">${s.num}</div>
+      <h1>${s.title}</h1>
+      <p>${s.p}</p>
+    </div>`;
+  }
+  else if(s.type === "toc"){
+    html += `<span class="kicker">نقشه راه</span>
+      <h1 class="slide-title">${s.title}</h1>
+      <div class="toc">${s.items.map((it,idx)=>`
+        <div class="item"><div class="n">${idx+1}</div>
+        <div><div class="t">${it[1]}</div><div class="r">${it[0]} · ${it[2]}</div></div></div>`).join("")}</div>`;
+  }
+  else {
+    html += `${s.kicker?`<span class="kicker ${s.kclass||''}">${s.kicker}</span>`:""}
+      <h1 class="slide-title">${s.title}</h1>`;
+
+    if(s.list){
+      html += `<ul class="content">${s.list.map(li=>{
+        const cls = li[2]?` ${li[2]}`:"";
+        const ico = li[0]?`<span class="ico">${li[0]}</span>`:"";
+        return `<li class="${cls.trim()}">${ico}<div>${li[1]}</div></li>`;
+      }).join("")}</ul>`;
+    }
+    if(s.grid2){
+      html += `<div class="grid2">${s.grid2.map(c=>`
+        <div class="card ${c.cls||''}"><h4>${c.h}</h4><p>${c.p}</p></div>`).join("")}</div>`;
+    }
+    if(s.grid3){
+      html += `<div class="grid3">${s.grid3.map(c=>`
+        <div class="card ${c.cls||''}"><h4>${c.h}</h4><p>${c.p}</p></div>`).join("")}</div>`;
+    }
+    if(s.flow){
+      html += `<div class="flow">${s.flow.map((f,idx)=>`
+        ${idx?`<div class="arr">←</div>`:""}
+        <div class="step"><div class="n">${f[0]}</div><div class="d">${f[1]}</div></div>`).join("")}</div>`;
+    }
+    if(s.stats){
+      html += `<div class="grid3">${s.stats.map(st=>`
+        <div class="stat ${st.c}"><div class="num">${st.n}</div><div class="lbl">${st.l}</div></div>`).join("")}</div>`;
+    }
+    if(s.formula){
+      html += `<div style="margin-top:16px" class="formula">${s.formula}</div>`;
+    }
+    if(s.table){
+      html += `<table class="cmp"><thead><tr>${s.table.head.map(h=>`<th>${h}</th>`).join("")}</tr></thead>
+        <tbody>${s.table.rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    }
+    if(s.check){
+      html += `<div class="check">${s.check.map(c=>`
+        <div class="c"><div class="box">✓</div><div>${c[0]}</div>
+        <div class="verdict ${c[2]==='yes'?'v-yes':'v-no'}">${c[1]}</div></div>`).join("")}</div>`;
+    }
+    if(s.note){
+      html += `<div class="note">${s.note}</div>`;
+    }
+  }
+  html += `</div>`;
+  return html;
+}
+
+stage.innerHTML = slides.map(renderSlide).join("");
+
+/* ---------------- Navigation ---------------- */
+let cur = 0;
+const els = [...document.querySelectorAll('.slide')];
+const pbar = document.getElementById('pbar');
+const counter = document.getElementById('counter');
+const notesEl = document.getElementById('notes');
+const notesText = document.getElementById('notesText');
+
+function show(i){
+  if(i<0) i=0;
+  if(i>slides.length-1) i=slides.length-1;
+  cur = i;
+  els.forEach((e,idx)=>e.classList.toggle('active', idx===i));
+  pbar.style.width = ((i+1)/slides.length*100)+'%';
+  counter.textContent = `${i+1} / ${slides.length}`;
+  notesText.textContent = slides[i].notes || 'برای این اسلاید یادداشتی ثبت نشده است.';
+  document.getElementById('prev').disabled = i===0;
+  document.getElementById('next').disabled = i===slides.length-1;
+  els[i].scrollTop = 0;
+}
+
+document.getElementById('next').onclick = ()=>show(cur+1);
+document.getElementById('prev').onclick = ()=>show(cur-1);
+document.getElementById('first').onclick = ()=>show(0);
+document.getElementById('last').onclick = ()=>show(slides.length-1);
+
+document.getElementById('btnNotes').onclick = function(){
+  notesEl.classList.toggle('show');
+  this.classList.toggle('active');
+};
+
+const overview = document.getElementById('overview');
+document.getElementById('btnOverview').onclick = ()=>overview.classList.add('show');
+document.getElementById('ovClose').onclick = ()=>overview.classList.remove('show');
+
+const ovGrid = document.getElementById('ovGrid');
+ovGrid.innerHTML = slides.map((s,i)=>{
+  let t = s.title || '';
+  return `<div class="ov-item" data-go="${i}"><div class="ovn">اسلاید ${i+1}</div><div class="ovt">${t}</div></div>`;
+}).join("");
+ovGrid.addEventListener('click', e=>{
+  const it = e.target.closest('[data-go]');
+  if(it){ show(+it.dataset.go); overview.classList.remove('show'); }
+});
+
+document.getElementById('btnFull').onclick = ()=>{
+  if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+  else document.exitFullscreen?.();
+};
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft' || e.key===' ' || e.key==='PageDown'){ e.preventDefault(); show(cur+1); }
+  else if(e.key==='ArrowRight' || e.key==='PageUp'){ e.preventDefault(); show(cur-1); }
+  else if(e.key==='Home') show(0);
+  else if(e.key==='End') show(slides.length-1);
+  else if(e.key.toLowerCase()==='p'){ document.getElementById('btnNotes').click(); }
+  else if(e.key.toLowerCase()==='o'){ overview.classList.toggle('show'); }
+  else if(e.key.toLowerCase()==='f'){ document.getElementById('btnFull').click(); }
+  else if(e.key==='Escape'){ overview.classList.remove('show'); }
+  else if(e.key==='ArrowDown' && overview.classList.contains('show')) return;
+});
+
+/* touch swipe */
+let tx=null;
+stage.addEventListener('touchstart', e=>tx=e.touches[0].clientX, {passive:true});
+stage.addEventListener('touchend', e=>{
+  if(tx===null) return;
+  const dx = e.changedTouches[0].clientX - tx;
+  if(dx>60) show(cur-1);
+  else if(dx<-60) show(cur+1);
+  tx=null;
+}, {passive:true});
+
+show(0);
+</script>
+</body>
+</html>
